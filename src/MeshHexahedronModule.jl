@@ -301,7 +301,7 @@ function H8hexahedron(xyz::FFltMat, nL::FInt, nW::FInt, nH::FInt; blockfun=nothi
             lo[1]  hi[2]  hi[3]];
     end
 
-    if blockfun == nothing
+    if blockfun === nothing
         blockfun = H8block; # default block type
     end
 
