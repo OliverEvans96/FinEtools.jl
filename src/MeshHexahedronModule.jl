@@ -340,29 +340,32 @@ function H27blockx(xs::FFltVec, ys::FFltVec, zs::FFltVec)
 end
 
 function doextrude(fens, fes::FESetQ4, nLayers, extrusionh)
-    nn1=count(fens);
-    nnt=nn1*nLayers;
-    ngc=count(fes)*nLayers;
-    hconn=zeros(FInt, ngc, 8);
+    nn1 = count(fens);
+    nnt = nn1*(nLayers+1);
+    ngc = count(fes)*nLayers;
+    hconn = zeros(FInt, ngc, 8);
     conn = connasarray(fes)
-    xyz =zeros(FFlt, nn1*(nLayers+1), 3);
-    for j=1:nn1
-        xyz[j, :] =extrusionh(fens.xyz[j, :], 0);
-    end
-    for k=1:nLayers
+    xyz = zeros(FFlt, nnt, 3);
+
+    # Compute new node coordinates
+    for k=0:nLayers
         for j=1:nn1
             f=j+k*nn1;
-            xyz[f, :] =extrusionh(fens.xyz[j, :], k);
+            xyz[f, :] = extrusionh(fens.xyz[j, :], k);
         end
     end
 
+    # Determine which nodes comprise the new elements
     gc=1;
     for k=1:nLayers
         for i=1:count(fes)
-            hconn[gc, :]=[broadcast(+, conn[i, :], (k-1)*nn1) broadcast(+, conn[i, :], k*nn1)];
-            gc=gc+1;
+            prevlayer = conn[i, :] .+ (k-1)*nn1
+            thislayer = conn[i, :] .+ k*nn1
+            hconn[gc, :] = [prevlayer thislayer]
+            gc += 1;
         end
     end
+
     efes = FESetH8(hconn);
     efens = FENodeSet(xyz);
     return efens, efes
@@ -372,6 +375,11 @@ end
     H8extrudeQ4(fens::FENodeSet,  fes::FESetQ4, nLayers::FInt, extrusionh::Function)
 
 Extrude a mesh of quadrilaterals into a mesh of hexahedra (H8).
+
+`nLayers` = the number of hexahedral layers to be created
+`extrusionh(x::Vector{Float64}, k::FInt)::Vector{Float64}` computes the coordinates
+of the the new node given the coordinates of the original node `x`, and the layer index `k`.
+Note that `k=0` corresponds to the original quadrilateral mesh.
 """
 function H8extrudeQ4(fens::FENodeSet,  fes::FESetQ4, nLayers::FInt, extrusionh::F) where {F<:Function}
     id = vec([i for i in 1:count(fens)])
