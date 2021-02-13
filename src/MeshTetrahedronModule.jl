@@ -8,7 +8,7 @@ module MeshTetrahedronModule
 __precompile__(true)
 
 using ..FTypesModule: FInt, FFlt, FCplxFlt, FFltVec, FIntVec, FFltMat, FIntMat, FMat, FVec, FDataDict
-import ..FESetModule: count, FESetT4, FESetT10, setlabel!, connasarray, subset
+import ..FESetModule: count, FESetT3, FESetT4, FESetT10, setlabel!, connasarray, subset, updateconn!
 import ..FENodeSetModule: FENodeSet
 import ..MeshUtilModule: makecontainer, addhyperface!, findhyperface!, linearspace
 import ..MeshSelectionModule: findunconnnodes, selectelem, connectednodes
@@ -131,6 +131,65 @@ function T4blockx(xs::FFltVec, ys::FFltVec, zs::FFltVec, orientation::Symbol)
     fes = FESetT4(conns[1:gc-1, :]);
 
     return fens, fes
+end
+
+function doextrude(fens, fes::FESetT3, nLayers, extrusionh)
+    nn1 = count(fens);
+    nnt = nn1*(nLayers+1);
+    ngc = 3 * count(fes)*nLayers;
+    hconn = zeros(FInt, ngc, 4);
+    conn = connasarray(fes)
+    xyz = zeros(FFlt, nnt, 3);
+
+    # Compute new node coordinates
+    for k=0:nLayers
+        for j=1:nn1
+            f=j+k*nn1;
+            xyz[f, :] = extrusionh(fens.xyz[j, :], k);
+        end
+    end
+
+    # Determine which nodes comprise the new elements
+    gc=1;
+    for k=1:nLayers
+        for i=1:count(fes)
+            prevlayer = conn[i, :] .+ (k-1)*nn1
+            thislayer = conn[i, :] .+ k*nn1
+            # NOTE: I'm ordering the vertices so that the signed volume is positive
+            # (according to the right-hand rule), but that doesn't fully specify the order.
+            # I'm not sure if there are more relevant conventions here.
+            hconn[gc, :] = [prevlayer[1] prevlayer[2] thislayer[1] thislayer[3]]
+            gc += 1;
+            hconn[gc, :] = [prevlayer[2] thislayer[2] thislayer[1] thislayer[3]]
+            gc += 1;
+            hconn[gc, :] = [prevlayer[1] prevlayer[3] prevlayer[2] thislayer[3]]
+            gc += 1;
+        end
+    end
+
+    efes = FESetT4(hconn);
+    efens = FENodeSet(xyz);
+    return efens, efes
+end
+
+"""
+    T4extrudeT3(fens::FENodeSet,  fes::FESetT3, nLayers::FInt, extrusionh::Function)
+
+Extrude a mesh of triangles (T3) into a mesh of tetrahedra (T4).
+
+`nLayers` = the number of newly created layers (in addition to the original, `k=0`)
+`extrusionh(x::Vector{Float64}, k::FInt)::Vector{Float64}` computes the coordinates
+of the the new node given the coordinates of the original node `x`, and the extruion level `k`.
+"""
+function T4extrudeT3(fens::FENodeSet,  fes::FESetT3, nLayers::FInt, extrusionh::F) where {F<:Function}
+    id = vec([i for i in 1:count(fens)])
+    cn=connectednodes(fes);
+    id[cn[:]]=vec([i for i in 1:length(cn)]);
+    q4fes= deepcopy(fes);
+    updateconn!(q4fes, id);
+    q4fens = FENodeSet(fens.xyz[cn[:], :]);
+    h8fens, h8fes= doextrude(q4fens, q4fes, nLayers, extrusionh);
+    return h8fens, h8fes
 end
 
 """
