@@ -191,7 +191,7 @@ function selectelem(fens::FENodeSet, fes::T; kwargs...) where {T<:AbstractFESet}
     # Extract arguments
     allin = nothing; flood = nothing; facing = nothing; label = nothing;
     # nearestto = nothing; smoothpatch = nothing;
-    startnode = 0; dotmin = 0.01
+    startnode = 0; dotmin = 0.01; inflate = 0
     overlappingbox = nothing
     for apair in pairs(kwargs)
         sy, val = apair
@@ -207,6 +207,8 @@ function selectelem(fens::FENodeSet, fes::T; kwargs...) where {T<:AbstractFESet}
             nearestto = val
         elseif sy == :allin
             allin = val
+        elseif sy == :inflate
+            inflate = val
         end
     end
 
@@ -388,6 +390,7 @@ function selectelem(fens::FENodeSet, fes::T; kwargs...) where {T<:AbstractFESet}
 
     # Select all FEs whose bounding box overlaps given box
     if (overlappingbox != nothing)
+        ovarlappingbox = inflatebox!(overlappingbox, inflate)
         bbox = zeros(2 * size(fens.xyz, 2))
         for i = 1:length(fes.conn)
             bbox = initbox!(bbox, vec(fens.xyz[fes.conn[i][1], :]))
